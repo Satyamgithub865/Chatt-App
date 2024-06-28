@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.2/socket.io.js"
+      integrity="sha512-VJ6+sp2E5rFQk05caiXXzQd1wBABpjEj1r5kMiLmGAAgwPItw1YpqsCCBtq8Yr1x6C49/mTpRdXtq8O2RcZhlQ=="
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    ></script>
+    <title>Home</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+        background-color: #9ac158;
+      }
+
+      .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background-color: #4eba5a;
+        padding: 6px 20px;
+        color: white;
+      }
+
+      .header img {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+      }
+
+      .header .user-info {
+        display: flex;
+        align-items: center;
+      }
+
+      .header .user-info h2 {
+        margin-left: 10px;
+        margin-right: 20px;
+      }
+
+      .header .dashboard-button {
+        background-color: white;
+        color: #4caf50;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        text-decoration: none;
+        font-size: 16px;
+      }
+
+      .container {
+        display: flex;
+        height: calc(100vh - 80px);
+      }
+
+      .users-list {
+        width: 30%;
+        background-color: white;
+        border-right: 1px solid #ddd;
+        overflow-y: auto;
+        padding: 20px;
+      }
+
+      .user-item {
+        display: flex;
+        align-items: center;
+        padding: 10px;
+        border-bottom: 1px solid #ddd;
+        cursor: pointer;
+      }
+
+      .user-item img {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+      }
+
+      .user-item h3 {
+        margin-left: 10px;
+        font-size: 18px;
+        color: #333;
+      }
+
+      .chat-area {
+        width: 70%;
+        display: flex;
+        flex-direction: column;
+        padding: 20px;
+        background-color: white;
+      }
+
+      .chat-box {
+        flex: 1;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        padding: 10px;
+        overflow-y: auto;
+        margin-bottom: 10px;
+        background-color: #e8f7e9;
+      }
+
+      .chat-input {
+        display: flex;
+        margin-top: 10px;
+      }
+
+      .chat-input textarea {
+        flex: 1;
+        padding: 8px;
+        font-size: 16px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        resize: none;
+      }
+
+      .chat-input button {
+        margin-left: 10px;
+        padding: 10px 20px;
+        background-color: #4caf50;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        font-size: 16px;
+        cursor: pointer;
+      }
+
+      .chat-input button:hover {
+        background-color: #45a049;
+      }
+
+      .status {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: end;
+        font-size: 12px;
+        font-family: cursive;
+      }
+
+      .online {
+        color: #4caf50;
+      }
+
+      .offline {
+        color: #bbb6b6;
+      }
+
+      .sender-message {
+        display: flex;
+        justify-content: end;
+      }
+
+      h4 {
+        background-color: #45a049;
+        color: #000000;
+        width: fit-content;
+        padding: 5px 8px;
+        border-radius: 5px 8px;
+        margin: 3px 0px;
+      }
+
+      .reciever-message {
+        display: flex;
+        justify-content: start;
+      }
+
+      .user-item.selected {
+        background-color: #e0e0e0;
+        border-left: 5px solid #4caf50;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <div class="user-info">
+        <img src="<%= user.image %>" alt="User Image" />
+        <h2><%= user.name %></h2>
+      </div>
+      <a href="/logout" class="dashboard-button">Logout</a>
+    </div>
+
+    <div class="container">
+      <div class="users-list">
+        <% users.forEach(user => { %>
+        <div class="user-item" user-id="<%= user._id %>">
+          <img src="<%= user.image %>" alt="User Image" />
+          <h3><%= user.name %></h3>
+          <% if (user.is_online === '1') { %>
+          <div class="status online" id="<%= user._id %>-status">Online</div>
+          <% } else { %>
+          <div class="status offline" id="<%= user._id %>-status">Offline</div>
+          <% } %>
+        </div>
+        <% }) %>
+      </div>
+      <div class="chat-area">
+        <div class="chat-box"></div>
+        <div class="chat-input">
+          <textarea
+            id="message"
+            placeholder="Type your message here..."
+            required
+          ></textarea>
+          <button onclick="handleSendMessage()">Send Message</button>
+        </div>
+      </div>
+    </div>
+  </body>
+  <script>
+    const chatBox = document.querySelector(".chat-box");
+    const sender_id = "<%= user._id %>";
+    let reciever_id;
+
+    const socket = io("/user-namespace", {
+      auth: {
+        token: "<%= user._id %>",
+      },
+    });
+
+    socket.on("getOnlineUser", (data) => {
+      const statusNode = document.getElementById(`${data.user_id}-status`);
+      statusNode.innerHTML = "Online";
+      statusNode.classList.remove("offline");
+      statusNode.classList.add("online");
+    });
+
+    socket.on("getOfflineUser", (data) => {
+      const statusNode = document.getElementById(`${data.user_id}-status`);
+      statusNode.innerHTML = "Offline";
+      statusNode.classList.remove("online");
+      statusNode.classList.add("offline");
+    });
+
+    const userList = document.querySelector(".users-list");
+    let selectedUserItem = null;
+    userList.addEventListener("click", function (e) {
+      const userItem = e.target.closest(".user-item");
+      if (userItem) {
+        if (selectedUserItem) {
+          selectedUserItem.classList.remove("selected");
+        }
+
+        userItem.classList.add("selected");
+        selectedUserItem = userItem;
+
+        const receiver = userItem.getAttribute("user-id");
+        reciever_id = receiver;
+
+        socket.emit("existingChats", {
+          sender_id: sender_id,
+          reciever_id: receiver,
+        });
+      }
+    });
+
+    const handleSendMessage = async () => {
+      if (!reciever_id) {
+        alert("Please select a user to send message");
+        return;
+      }
+
+      const messageBox = document.getElementById("message");
+      const message = messageBox.value;
+
+      const data = {
+        sender_id: sender_id,
+        reciever_id: reciever_id,
+        message: message,
+      };
+
+      try {
+        const response = await fetch("http://localhost:8000/save-chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(data),
+        });
+
+        const result = await response.json();
+
+        const content = `
+          <div class="sender-message">
+            <h4>${result.data.message}</h4>
+          </div>
+        `;
+
+        chatBox.innerHTML += content;
+        messageBox.value = "";
+
+        socket.emit("newChat", result.data);
+      } catch (error) {
+        console.error("Error:", error);
+      }
+    };
+
+    socket.on("loadNewChat", (data) => {
+      if (sender_id === data.reciever_id && reciever_id === data.sender_id) {
+        const content = `
+          <div class="reciever-message">
+            <h4>${data.message}</h4>
+          </div>
+        `;
+        const chatBox = document.querySelector(".chat-box");
+        chatBox.innerHTML += content;
+      }
+    });
+
+    socket.on("loadExistingChat", (data) => {
+      chatBox.innerHTML = "";
+      const chats = data.chats;
+
+      for (let i = 0; i < chats.length; i++) {
+        let className = "";
+
+        if (chats[i]["sender_id"] == sender_id) {
+          className = "sender-message";
+        } else {
+          className = "reciever-message";
+        }
+
+        const content = `
+          <div class=${className}>
+            <h4>${data.chats[i].message}</h4>
+          </div>
+        `;
+        chatBox.innerHTML += content;
+      }
+    });
+  </script>
+</html>
